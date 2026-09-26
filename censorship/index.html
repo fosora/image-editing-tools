@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixelated Blur Image Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+<header>
+    <h1>Pixelated Blur — Image Editor</h1>
+</header>
+
+<div class="app">
+    <aside class="sidebar">
+
+        <div class="section">
+            <div class="section-title">Image</div>
+            <input type="file" id="fileInput" accept="image/*" hidden>
+            <button class="primary" id="openButton">Open image</button>
+            <button id="pasteButton">Paste image</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Brush</div>
+
+            <label>
+                Brush size
+                <span class="value" id="brushValue">60 px</span>
+            </label>
+
+            <input type="range" id="brushSize" min="10" max="500" value="60">
+
+            <label>
+                Pixelation level
+                <span class="value" id="pixelValue">12</span>
+            </label>
+
+            <input type="range" id="pixelSize" min="2" max="60" value="12">
+        </div>
+
+        <div class="section">
+            <div class="section-title">Tool</div>
+            <select id="tool">
+                <option value="blur">Pixelated blur</option>
+                <option value="erase">Erase effect</option>
+            </select>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Zoom</div>
+
+            <div class="zoom-controls">
+                <button id="zoomOutButton" title="Zoom out">−</button>
+                <span id="zoomValue">100%</span>
+                <button id="zoomInButton" title="Zoom in">+</button>
+            </div>
+
+            <button id="fitButton">Fit to screen</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">History</div>
+            <button id="undoButton">↶ Undo</button>
+            <button id="redoButton">↷ Redo</button>
+            <button id="clearButton">Clear effects</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Export</div>
+            <button class="download" id="downloadButton">↓ Save as PNG</button>
+        </div>
+
+        <div class="section instructions">
+            <div class="section-title">How to use</div>
+            <p>1. Open or paste an image.</p>
+            <p>2. Choose the brush size.</p>
+            <p>3. Choose the pixelation level.</p>
+            <p>4. Paint over the desired area.</p>
+            <p>You can also drag an image into the center area.</p>
+            <p>The result can be saved directly as a PNG.</p>
+        </div>
+    </aside>
+
+    <main class="workspace" id="workspace">
+        <div class="canvas-wrapper">
+            <canvas id="canvas"></canvas>
+            <div id="brushIndicator"></div>
+
+            <div class="empty" id="empty">
+                Open an image or paste with Ctrl + V
+            </div>
+        </div>
+
+        <div class="status" id="status">No image loaded</div>
+    </main>
+</div>
+
+<!-- Shared state and DOM references -->
+<script src="js/state.js"></script>
+
+<!-- Image loading, clipboard and drag & drop -->
+<script src="js/image.js"></script>
+
+<!-- Brush painting and brush indicator -->
+<script src="js/brush.js"></script>
+
+<!-- Pixelation and final canvas rendering -->
+<script src="js/render.js"></script>
+
+<!-- Zoom and canvas panning -->
+<script src="js/zoom.js"></script>
+
+<!-- Clear, export and UI controls -->
+<script src="js/ui.js"></script>
+
+<!-- Application startup -->
+<script src="js/main.js"></script>
+</body>
+</html>
