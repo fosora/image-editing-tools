@@ -1,0 +1,164 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+}
+
+body {
+    min-height: 100vh;
+
+    font-family: Arial, Helvetica, sans-serif;
+
+    background: #181818;
+    color: #fff;
+}
+
+/* HEADER */
+
+.site-header {
+    height: 64px;
+
+    display: flex;
+    align-items: center;
+
+    padding: 0 20px;
+
+    background: #222;
+    border-bottom: 1px solid #333;
+}
+
+.site-title {
+    margin: 0;
+
+    font-size: 19px;
+    font-weight: 600;
+}
+
+/* HOME */
+
+.home {
+    min-height: calc(100vh - 64px);
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    padding: 30px;
+}
+
+/* HOME CARD */
+
+.home-card {
+    width: 100%;
+    max-width: 560px;
+
+    background: #202020;
+    border: 1px solid #333;
+    border-radius: 10px;
+
+    padding: 40px;
+}
+
+.home-content {
+    text-align: center;
+}
+
+/* LABEL */
+
+.home-label {
+    display: block;
+
+    margin-bottom: 12px;
+
+    color: #aaa;
+
+    font-size: 12px;
+    font-weight: 600;
+
+    letter-spacing: 1px;
+}
+
+/* TITLE */
+
+.home-title {
+    margin: 0 0 14px;
+
+    font-size: 28px;
+    font-weight: 600;
+}
+
+/* DESCRIPTION */
+
+.home-description {
+    max-width: 440px;
+
+    margin: 0 auto 28px;
+
+    color: #aaa;
+
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* BUTTON */
+
+.button {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+
+    min-height: 44px;
+
+    padding: 0 20px;
+
+    border: none;
+    border-radius: 7px;
+
+    font-size: 14px;
+    font-weight: 500;
+
+    text-decoration: none;
+
+    cursor: pointer;
+
+    transition:
+        background-color 0.15s ease,
+        transform 0.15s ease;
+}
+
+.button-primary {
+    background: #4d75ff;
+    color: #fff;
+}
+
+.button-primary:hover {
+    background: #5c82ff;
+}
+
+.button-primary:active {
+    transform: translateY(1px);
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 600px) {
+    .home {
+        padding: 20px;
+    }
+
+    .home-card {
+        padding: 30px 24px;
+    }
+
+    .home-title {
+        font-size: 24px;
+    }
+
+    .button {
+        width: 100%;
+    }
+}
