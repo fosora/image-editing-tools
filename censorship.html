@@ -143,13 +143,36 @@ select {
     align-items: center;
     overflow: auto;
     padding: 30px;
+    cursor: default;
+    user-select: none;
+}
+
+.canvas-wrapper.panning {
+    cursor: grabbing;
 }
 
 #canvas {
     display: none;
     box-shadow: 0 5px 30px rgba(0,0,0,.5);
-    cursor: crosshair;
+    cursor: none;
     flex: none;
+}
+
+/* BRUSH INDICATOR */
+
+#brushIndicator {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border: 2px solid white;
+    border-radius: 50%;
+    pointer-events: none;
+    display: none;
+    z-index: 20;
+    transform: translate(-50%, -50%);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.8),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .zoom-controls {
@@ -169,15 +192,6 @@ select {
     text-align: center;
     font-size: 13px;
     color: #ccc;
-}
-
-.canvas-wrapper {
-    cursor: default;
-    user-select: none;
-}
-
-.canvas-wrapper.panning {
-    cursor: grabbing;
 }
 
 .empty {
@@ -370,6 +384,8 @@ select {
 
             <canvas id="canvas"></canvas>
 
+            <div id="brushIndicator"></div>
+
             <div class="empty" id="empty">
                 Open an image or paste with Ctrl + V
             </div>
@@ -416,6 +432,9 @@ const zoomValue = document.getElementById("zoomValue");
 const empty = document.getElementById("empty");
 const status = document.getElementById("status");
 
+const brushIndicator =
+    document.getElementById("brushIndicator");
+
 let image = null;
 let drawing = false;
 
@@ -452,10 +471,25 @@ let maskCtx = null;
 ========================================================= */
 
 brushSize.addEventListener("input", () => {
-    brushValue.textContent = brushSize.value + " px";
+
+    brushValue.textContent =
+        brushSize.value + " px";
+
+    if (image) {
+
+        const size =
+            Number(brushSize.value) * zoom;
+
+        brushIndicator.style.width =
+            size + "px";
+
+        brushIndicator.style.height =
+            size + "px";
+    }
 });
 
 pixelSize.addEventListener("input", () => {
+
     pixelValue.textContent = pixelSize.value;
 
     /*
@@ -702,6 +736,102 @@ function getCanvasPosition(e) {
 
 
 /* =========================================================
+   BRUSH INDICATOR
+========================================================= */
+
+function updateBrushIndicator(e) {
+
+    if (!image || spacePressed || isPanning) {
+
+        brushIndicator.style.display =
+            "none";
+
+        return;
+    }
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+    const x =
+        e.clientX - rect.left;
+
+    const y =
+        e.clientY - rect.top;
+
+    /*
+        Only show the indicator while the cursor
+        is actually over the image.
+    */
+
+    if (
+        x < 0 ||
+        y < 0 ||
+        x > rect.width ||
+        y > rect.height
+    ) {
+
+        brushIndicator.style.display =
+            "none";
+
+        return;
+    }
+
+    /*
+        Brush size is stored in the original image
+        pixel coordinates.
+
+        Therefore the visual size must be multiplied
+        by the current zoom.
+    */
+
+    const size =
+        Number(brushSize.value) * zoom;
+
+    brushIndicator.style.width =
+        size + "px";
+
+    brushIndicator.style.height =
+        size + "px";
+
+    /*
+        Position relative to the canvas wrapper.
+    */
+
+    brushIndicator.style.left =
+        (canvas.offsetLeft + x) + "px";
+
+    brushIndicator.style.top =
+        (canvas.offsetTop + y) + "px";
+
+    brushIndicator.style.display =
+        "block";
+}
+
+
+function hideBrushIndicator() {
+
+    brushIndicator.style.display =
+        "none";
+}
+
+
+canvas.addEventListener(
+    "pointermove",
+    updateBrushIndicator
+);
+
+canvas.addEventListener(
+    "pointerenter",
+    updateBrushIndicator
+);
+
+canvas.addEventListener(
+    "pointerleave",
+    hideBrushIndicator
+);
+
+
+/* =========================================================
    BRUSH
 ========================================================= */
 
@@ -922,15 +1052,6 @@ function render() {
     ctx.globalCompositeOperation =
         "destination-in";
 
-    /*
-        We do not do this directly because
-        we need to keep the original image
-        outside the painted area.
-
-        The composition below is done with
-        an intermediate canvas.
-    */
-
     ctx.restore();
 
 
@@ -967,12 +1088,6 @@ function render() {
     resultCtx.globalCompositeOperation =
         "destination-out";
 
-    /*
-        Remove the region where the pixelation
-        should NOT appear.
-
-        We use the inverted mask.
-    */
 
     const inverseMask =
         document.createElement("canvas");
@@ -1367,160 +1482,365 @@ downloadButton.addEventListener("click", () => {
 ========================================================= */
 
 function updateZoomDisplay() {
-    zoomValue.textContent = Math.round(zoom * 100) + "%";
+
+    zoomValue.textContent =
+        Math.round(zoom * 100) + "%";
 }
 
+
+function updateBrushIndicatorSize() {
+
+    if (!image) return;
+
+    const size =
+        Number(brushSize.value) * zoom;
+
+    brushIndicator.style.width =
+        size + "px";
+
+    brushIndicator.style.height =
+        size + "px";
+}
+
+
 function setZoom(newZoom, anchorX = null, anchorY = null) {
+
     if (!image) return;
 
     const oldZoom = zoom;
-    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
 
-    const rect = canvasWrapper.getBoundingClientRect();
+    zoom =
+        Math.max(
+            MIN_ZOOM,
+            Math.min(MAX_ZOOM, newZoom)
+        );
 
-    // Keeps the point under the cursor while zooming.
-    const x = anchorX ?? canvasWrapper.clientWidth / 2;
-    const y = anchorY ?? canvasWrapper.clientHeight / 2;
+    const x =
+        anchorX ??
+        canvasWrapper.clientWidth / 2;
+
+    const y =
+        anchorY ??
+        canvasWrapper.clientHeight / 2;
 
     const imageX =
-        (canvasWrapper.scrollLeft + x - canvas.offsetLeft) / oldZoom;
+        (canvasWrapper.scrollLeft +
+            x -
+            canvas.offsetLeft) /
+        oldZoom;
 
     const imageY =
-        (canvasWrapper.scrollTop + y - canvas.offsetTop) / oldZoom;
+        (canvasWrapper.scrollTop +
+            y -
+            canvas.offsetTop) /
+        oldZoom;
 
-    canvas.style.width = canvas.width * zoom + "px";
-    canvas.style.height = canvas.height * zoom + "px";
+    canvas.style.width =
+        canvas.width * zoom + "px";
 
-    requestAnimationFrame(() => {
-        canvasWrapper.scrollLeft =
-            Math.max(0, imageX * zoom + canvas.offsetLeft - x);
-
-        canvasWrapper.scrollTop =
-            Math.max(0, imageY * zoom + canvas.offsetTop - y);
-    });
+    canvas.style.height =
+        canvas.height * zoom + "px";
 
     updateZoomDisplay();
+    updateBrushIndicatorSize();
+
+    requestAnimationFrame(() => {
+
+        canvasWrapper.scrollLeft =
+            Math.max(
+                0,
+                imageX * zoom +
+                canvas.offsetLeft -
+                x
+            );
+
+        canvasWrapper.scrollTop =
+            Math.max(
+                0,
+                imageY * zoom +
+                canvas.offsetTop -
+                y
+            );
+
+    });
 }
+
 
 function fitCanvas() {
+
     if (!image) return;
 
-    const maxWidth = canvasWrapper.clientWidth - 60;
-    const maxHeight = canvasWrapper.clientHeight - 60;
+    const maxWidth =
+        canvasWrapper.clientWidth - 60;
 
-    zoom = Math.min(
-        1,
-        maxWidth / canvas.width,
-        maxHeight / canvas.height
-    );
+    const maxHeight =
+        canvasWrapper.clientHeight - 60;
 
-    canvas.style.width = canvas.width * zoom + "px";
-    canvas.style.height = canvas.height * zoom + "px";
+    zoom =
+        Math.min(
+            1,
+            maxWidth / canvas.width,
+            maxHeight / canvas.height
+        );
+
+    canvas.style.width =
+        canvas.width * zoom + "px";
+
+    canvas.style.height =
+        canvas.height * zoom + "px";
 
     updateZoomDisplay();
+    updateBrushIndicatorSize();
 
     requestAnimationFrame(() => {
+
         canvasWrapper.scrollLeft =
-            Math.max(0, (canvasWrapper.scrollWidth - canvasWrapper.clientWidth) / 2);
+            Math.max(
+                0,
+                (canvasWrapper.scrollWidth -
+                    canvasWrapper.clientWidth) / 2
+            );
 
         canvasWrapper.scrollTop =
-            Math.max(0, (canvasWrapper.scrollHeight - canvasWrapper.clientHeight) / 2);
+            Math.max(
+                0,
+                (canvasWrapper.scrollHeight -
+                    canvasWrapper.clientHeight) / 2
+            );
+
     });
 }
 
+
 zoomInButton.addEventListener("click", () => {
+
     setZoom(zoom * 1.25);
+
 });
+
 
 zoomOutButton.addEventListener("click", () => {
+
     setZoom(zoom / 1.25);
+
 });
 
-fitButton.addEventListener("click", fitCanvas);
 
-// Ctrl/Cmd + mouse wheel = zoom.
-canvasWrapper.addEventListener("wheel", e => {
-    if (!image || !e.ctrlKey) return;
+fitButton.addEventListener(
+    "click",
+    fitCanvas
+);
 
-    e.preventDefault();
 
-    const rect = canvasWrapper.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+/* =========================================================
+   ZOOM WITH CTRL + MOUSE WHEEL
+========================================================= */
 
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    setZoom(zoom * factor, x, y);
-}, { passive: false });
+canvasWrapper.addEventListener(
+    "wheel",
+    e => {
 
-// Shortcuts: Ctrl/Cmd + / -, Ctrl/Cmd + 0.
+        if (!image || !e.ctrlKey) return;
+
+        e.preventDefault();
+
+        const rect =
+            canvasWrapper.getBoundingClientRect();
+
+        const x =
+            e.clientX - rect.left;
+
+        const y =
+            e.clientY - rect.top;
+
+        const factor =
+            e.deltaY < 0
+                ? 1.15
+                : 1 / 1.15;
+
+        setZoom(
+            zoom * factor,
+            x,
+            y
+        );
+
+    },
+    { passive: false }
+);
+
+
+/* =========================================================
+   KEYBOARD SHORTCUTS
+========================================================= */
+
 window.addEventListener("keydown", e => {
-    if (e.code === "Space" && !e.repeat) {
+
+    if (
+        e.code === "Space" &&
+        !e.repeat
+    ) {
+
         spacePressed = true;
-        if (!isPanning) canvasWrapper.style.cursor = "grab";
+
+        hideBrushIndicator();
+
+        if (!isPanning) {
+            canvasWrapper.style.cursor =
+                "grab";
+        }
     }
 
-    if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
+
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "+" || e.key === "=")
+    ) {
+
         e.preventDefault();
-        setZoom(zoom * 1.25);
+
+        setZoom(
+            zoom * 1.25
+        );
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "-"
+    ) {
+
         e.preventDefault();
-        setZoom(zoom / 1.25);
+
+        setZoom(
+            zoom / 1.25
+        );
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "0"
+    ) {
+
         e.preventDefault();
+
         fitCanvas();
     }
+
 });
+
 
 window.addEventListener("keyup", e => {
+
     if (e.code === "Space") {
+
         spacePressed = false;
-        if (!isPanning) canvasWrapper.style.cursor = "default";
+
+        if (!isPanning) {
+
+            canvasWrapper.style.cursor =
+                "default";
+        }
     }
+
 });
 
-// Space + drag or middle mouse button = pan.
-canvasWrapper.addEventListener("pointerdown", e => {
-    if (!image || (!spacePressed && e.button !== 1)) return;
 
-    isPanning = true;
-    panStartX = e.clientX;
-    panStartY = e.clientY;
-    scrollStartLeft = canvasWrapper.scrollLeft;
-    scrollStartTop = canvasWrapper.scrollTop;
+/* =========================================================
+   SPACE + DRAG / MIDDLE MOUSE = PAN
+========================================================= */
 
-    canvasWrapper.classList.add("panning");
-    canvasWrapper.setPointerCapture(e.pointerId);
-    e.preventDefault();
-});
+canvasWrapper.addEventListener(
+    "pointerdown",
+    e => {
 
-canvasWrapper.addEventListener("pointermove", e => {
-    if (!isPanning) return;
+        if (
+            !image ||
+            (!spacePressed && e.button !== 1)
+        ) {
+            return;
+        }
 
-    canvasWrapper.scrollLeft =
-        scrollStartLeft - (e.clientX - panStartX);
+        isPanning = true;
 
-    canvasWrapper.scrollTop =
-        scrollStartTop - (e.clientY - panStartY);
-});
+        hideBrushIndicator();
+
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+
+        scrollStartLeft =
+            canvasWrapper.scrollLeft;
+
+        scrollStartTop =
+            canvasWrapper.scrollTop;
+
+        canvasWrapper.classList.add(
+            "panning"
+        );
+
+        canvasWrapper.setPointerCapture(
+            e.pointerId
+        );
+
+        e.preventDefault();
+
+    }
+);
+
+
+canvasWrapper.addEventListener(
+    "pointermove",
+    e => {
+
+        if (!isPanning) return;
+
+        canvasWrapper.scrollLeft =
+            scrollStartLeft -
+            (e.clientX - panStartX);
+
+        canvasWrapper.scrollTop =
+            scrollStartTop -
+            (e.clientY - panStartY);
+
+    }
+);
+
 
 function stopPanning(e) {
+
     if (!isPanning) return;
 
     isPanning = false;
-    canvasWrapper.classList.remove("panning");
+
+    canvasWrapper.classList.remove(
+        "panning"
+    );
 
     try {
-        canvasWrapper.releasePointerCapture(e.pointerId);
+
+        canvasWrapper.releasePointerCapture(
+            e.pointerId
+        );
+
     } catch {}
+
 }
 
-canvasWrapper.addEventListener("pointerup", stopPanning);
-canvasWrapper.addEventListener("pointercancel", stopPanning);
 
+canvasWrapper.addEventListener(
+    "pointerup",
+    stopPanning
+);
+
+canvasWrapper.addEventListener(
+    "pointercancel",
+    stopPanning
+);
+
+
+/* =========================================================
+   WINDOW RESIZE
+========================================================= */
 
 window.addEventListener(
     "resize",
