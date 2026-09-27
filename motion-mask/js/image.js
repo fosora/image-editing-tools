@@ -1,5 +1,6 @@
 import { $, canvas, ctx, state, resetLayers, invalidateWarpCache } from "./state.js";
 import { drawPaintMask, resetPaintHistory } from "./paint.js";
+import { resetZoom } from "./zoom.js";
 
 let imageLoadVersion = 0;
 
@@ -14,6 +15,7 @@ function showImageError(message) {
 export function fitCanvasToContainer() {
   if (!state.image) return;
   const box = $("#canvasContainer");
+  resetZoom();
   const ratio = Math.min(Math.max(1, box.clientWidth - 20) / state.image.width, Math.max(1, box.clientHeight - 20) / state.image.height, 1);
   const width = Math.max(1, Math.round(state.image.width * ratio));
   const height = Math.max(1, Math.round(state.image.height * ratio));

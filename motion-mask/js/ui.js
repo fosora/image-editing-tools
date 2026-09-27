@@ -1,5 +1,5 @@
 import { $, $$, state, activeLayer, addLayer, removeActiveLayer, exportSettings, animationPresets, invalidateWarpCache } from "./state.js";
-import { drawPaintMask, refreshPaintControls } from "./paint.js";
+import { drawPaintMask, refreshPaintControls, hideBrushCursor } from "./paint.js";
 import { renderAnimationFrame } from "./animation.js";
 import { exportWebM, exportGIF, exportVideoMP4 } from "./export.js";
 
@@ -9,7 +9,7 @@ export function setStep(step) {
   $("#paintPanel").hidden = step !== 1; $("#animationPanel").hidden = step !== 2; $("#exportPanel").hidden = step !== 3;
   $("#modeTitle").textContent = step === 1 ? "Paint" : step === 2 ? "Animation" : "Export";
   $("#hint").textContent = step === 1 ? "Select a layer, then paint only the parts you want to move." : step === 2 ? "Each layer has its own motion settings." : "Review the animation and export the result.";
-  if (step === 1) drawPaintMask(); if (step === 2) { state.isPlaying = true; $("#playButton").textContent = "⏸ Pause"; renderAnimationFrame(performance.now()); }
+  if (step === 1) drawPaintMask(); else hideBrushCursor(); if (step === 2) { state.isPlaying = true; $("#playButton").textContent = "⏸ Pause"; renderAnimationFrame(performance.now()); }
 }
 function renderLayers() {
   $("#layerList").innerHTML = state.layers.map((_, index) => `<button class="layerItem ${index === state.activeLayerIndex ? "active" : ""}" data-layer="${index}"><span>Layer ${index + 1}</span><small>${index === state.activeLayerIndex ? "Selected" : "Select"}</small></button>`).join("");
