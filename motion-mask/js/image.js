@@ -1,6 +1,16 @@
 import { $, canvas, ctx, state, resetLayers, invalidateWarpCache } from "./state.js";
 import { drawPaintMask, resetPaintHistory } from "./paint.js";
 
+let imageLoadVersion = 0;
+
+function isImageFile(file) {
+  return file && (file.type.startsWith("image/") || /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name));
+}
+function showImageError(message) {
+  const hint = $("#hint");
+  hint.textContent = message;
+}
+
 export function fitCanvasToContainer() {
   if (!state.image) return;
   const box = $("#canvasContainer");
@@ -21,12 +31,18 @@ export function fitCanvasToContainer() {
 }
 
 export function loadImageFile(file) {
-  if (!file || !file.type.match(/^image\/(png|jpeg|webp)$/)) return;
+  if (!isImageFile(file)) { showImageError("Choose a valid image file to continue."); return; }
+  const version = ++imageLoadVersion;
   const url = URL.createObjectURL(file), image = new Image();
   image.onload = () => {
+    if (version !== imageLoadVersion) { URL.revokeObjectURL(url); return; }
     state.image = image; resetLayers(); invalidateWarpCache(); resetPaintHistory();
     $("#emptyState").classList.add("hidden"); fitCanvasToContainer();
     URL.revokeObjectURL(url); document.dispatchEvent(new CustomEvent("image-loaded"));
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    if (version === imageLoadVersion) showImageError("This image could not be loaded. Please try another file.");
   };
   image.src = url;
 }
@@ -39,7 +55,7 @@ function createSampleImage() {
   sample.toBlob((blob) => loadImageFile(new File([blob], "sample.png", { type: "image/png" })));
 }
 export function initializeImageControls() {
-  $("#uploadButton").onclick = () => $("#fileInput").click();
+  $("#uploadButton").onclick = () => { const input = $("#fileInput"); input.value = ""; input.click(); };
   $("#fileInput").onchange = (event) => loadImageFile(event.target.files[0]);
   [$("#dropZone"), $("#canvasContainer")].forEach((element) => { element.addEventListener("dragover", (event) => event.preventDefault()); element.addEventListener("drop", (event) => { event.preventDefault(); loadImageFile(event.dataTransfer.files[0]); }); });
   $("#pasteButton").onclick = async () => { try { const items = await navigator.clipboard.read(); for (const item of items) { const type = item.types.find((value) => value.startsWith("image/")); if (type) { loadImageFile(new File([await item.getType(type)], `pasted.${type.split("/")[1]}`, { type })); return; } } } catch { alert("The browser did not allow clipboard access. Use Ctrl+V."); } };
