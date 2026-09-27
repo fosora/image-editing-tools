@@ -1,6 +1,90 @@
 import { canvas, exportSettings, state } from "./state.js";
 import { renderAnimationFrame } from "./animation.js";
 
+const GIF_PALETTE_SIZE = 256;
+
+function animationDuration() {
+ return Math.max(...state.layers.map((layer) => layer.settings.cycle)) * 1000;
+}
+
+function nextFrame() {
+ return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function gifPalette() {
+ const palette = new Uint8Array(GIF_PALETTE_SIZE * 3);
+ for (let index = 0; index < GIF_PALETTE_SIZE; index++) {
+  palette[index * 3] = (index >> 5) * 255 / 7;
+  palette[index * 3 + 1] = ((index >> 2) & 7) * 255 / 7;
+  palette[index * 3 + 2] = (index & 3) * 255 / 3;
+ }
+ return palette;
+}
+
+function gifHeader(width, height) {
+ const bytes = [71, 73, 70, 56, 57, 97, width & 255, width >> 8, height & 255, height >> 8, 0xF7, 0, 0];
+ return new Uint8Array([...bytes, ...gifPalette()]);
+}
+
+function gifIndexes(rgba) {
+ const indexes = new Uint8Array(rgba.length / 4);
+ for (let source = 0, target = 0; source < rgba.length; source += 4, target++) {
+  indexes[target] = (rgba[source] & 0xE0) | ((rgba[source + 1] & 0xE0) >> 3) | (rgba[source + 2] >> 6);
+ }
+ return indexes;
+}
+
+async function lzwEncode(indexes) {
+ const minimumCodeSize = 8;
+ const clearCode = 1 << minimumCodeSize;
+ const endCode = clearCode + 1;
+ let codeSize = minimumCodeSize + 1;
+ let nextCode = endCode + 1;
+ let dictionary = new Map();
+ const output = [];
+ let bitBuffer = 0;
+ let bitCount = 0;
+ const writeCode = (code) => {
+  bitBuffer |= code << bitCount;
+  bitCount += codeSize;
+  while (bitCount >= 8) { output.push(bitBuffer & 255); bitBuffer >>= 8; bitCount -= 8; }
+ };
+
+ writeCode(clearCode);
+ if (!indexes.length) { writeCode(endCode); return output; }
+ let sequence = String(indexes[0]);
+ for (let index = 1; index < indexes.length; index++) {
+  const pixel = indexes[index];
+  const candidate = sequence + "," + pixel;
+  if (dictionary.has(candidate)) {
+   sequence = candidate;
+  } else {
+   writeCode(dictionary.get(sequence) ?? Number(sequence));
+   if (nextCode < 4096) {
+    dictionary.set(candidate, nextCode++);
+    // The decoder learns this entry after reading the next code, so grow one code later.
+    if (nextCode === (1 << codeSize) + 1 && codeSize < 12) codeSize++;
+   }
+   sequence = String(pixel);
+  }
+  // GIF encoding can process millions of pixels. Yield periodically so it never blocks the UI.
+  if (index && index % 32768 === 0) await nextFrame();
+ }
+ if (sequence) writeCode(dictionary.get(sequence) ?? Number(sequence));
+ writeCode(endCode);
+ if (bitCount) output.push(bitBuffer & 255);
+ return output;
+}
+
+async function gifFrame(rgba, width, height, fps) {
+ const data = await lzwEncode(gifIndexes(rgba));
+ const delay = Math.max(1, Math.round(100 / fps));
+ const bytes = [0x21, 0xF9, 4, 0x04, delay & 255, delay >> 8, 0, 0, 0x2C, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 8];
+ for (let index = 0; index < data.length; index += 255) bytes.push(Math.min(255, data.length - index), ...data.slice(index, index + 255));
+ bytes.push(0);
+ return new Uint8Array(bytes);
+}
+
 export async function exportWebM(){
  const recCanvas=document.createElement("canvas");recCanvas.width=canvas.width;recCanvas.height=canvas.height;const rctx=recCanvas.getContext("2d");
  const stream=recCanvas.captureStream(exportSettings.fps);
@@ -9,25 +93,29 @@ export async function exportWebM(){
  rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
  const done=new Promise(res=>rec.onstop=()=>res(new Blob(chunks,{type:mime})));
  rec.start(100);
- const total=Math.max(...state.layers.map((layer)=>layer.settings.cycle))*1000,start=performance.now();
+ const total=animationDuration(),start=performance.now();
  function tick(now){const elapsed=now-start;if(elapsed>=total){rec.stop();return}renderAnimationFrame(elapsed,rctx);requestAnimationFrame(tick)}requestAnimationFrame(tick);
  return done;
 }
-// Minimal GIF89a encoder with global palette generated from sampled frames.
-export function encodeGIF(frames,w,h,fps){
- const sample=frames.flatMap(a=>{let s=[];for(let i=0;i<a.length;i+=4*7)s.push([a[i],a[i+1],a[i+2]]);return s});
- const pal=[];for(let i=0;i<256;i++){const q=sample[Math.floor(i*sample.length/256)]||[0,0,0];pal.push(...q.map(v=>Math.max(0,Math.min(255,Math.round(v/16)*16))))}
- const bytes=[];const put=s=>[...s].forEach(c=>bytes.push(c.charCodeAt(0)));put("GIF89a");const le=n=>[n&255,n>>8&255];bytes.push(...le(w),...le(h),0xF7,0,0,...pal);
- const u16=n=>{bytes.push(n&255,n>>8)};const lzw=(pix,min=8)=>{const clearButton=1<<min,end=clearButton+1;let size=min+1,next=end+1,dict=new Map(),out=[],bits=0,cur=0;function code(c){cur|=c<<bits;bits+=size;while(bits>=8){out.push(cur&255);cur>>=8;bits-=8}}code(clearButton);let s="";for(const p of pix){const k=s+","+p;if(s&&dict.has(k)){s=k}else{if(s)code(dict.get(s));else code(p);if(s&&next<4096){dict.set(k,next++);if(next===(1<<size)&&size<12)size++}s=""+p}}if(s)code(dict.get(s)||+s);code(end);if(bits)out.push(cur&255);return out}
- frames.forEach((rgba,idx)=>{bytes.push(0x21,0xF9,4,0x04);u16(Math.max(1,Math.round(100/fps)));bytes.push(0,0,0x2C,...le(0),...le(0),...le(w),...le(h),0);const pix=[];for(let i=0;i<rgba.length;i+=4){let best=0,bd=1e9;for(let j=0;j<256;j++){const dr=rgba[i]-pal[j*3],dg=rgba[i+1]-pal[j*3+1],db=rgba[i+2]-pal[j*3+2],d=dr*dr+dg*dg+db*db;if(d<bd){bd=d;best=j}}pix.push(best)}const data=lzw(pix);bytes.push(8);for(let i=0;i<data.length;i+=255){const n=Math.min(255,data.length-i);bytes.push(n,...data.slice(i,i+n))}bytes.push(0)});bytes.push(0x3B);return new Uint8Array(bytes)
-}
+
 export async function exportGIF(){
- const w=canvas.width,h=canvas.height,c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d"),frames=[],count=Math.round(Math.max(...state.layers.map((layer)=>layer.settings.cycle))*exportSettings.fps);
- for(let i=0;i<count;i++){renderAnimationFrame(i/exportSettings.fps*1000,x);frames.push(x.getImageData(0,0,w,h).data.slice());if(i%4===0)await new Promise(requestAnimationFrame)}
- return new Blob([encodeGIF(frames,w,h,exportSettings.fps)],{type:"image/gif"});
+ const width = canvas.width, height = canvas.height;
+ const exportCanvas = document.createElement("canvas");
+ exportCanvas.width = width; exportCanvas.height = height;
+ const context = exportCanvas.getContext("2d");
+ const count = Math.round(animationDuration() / 1000 * exportSettings.fps);
+ const chunks = [gifHeader(width, height)];
+ for (let index = 0; index < count; index++) {
+  renderAnimationFrame(index / exportSettings.fps * 1000, context);
+  chunks.push(await gifFrame(context.getImageData(0, 0, width, height).data, width, height, exportSettings.fps));
+  await nextFrame();
+ }
+ chunks.push(new Uint8Array([0x3B]));
+ return new Blob(chunks, { type: "image/gif" });
 }
+
 export async function exportVideoMP4(){ // MediaRecorder may expose MP4 on some browsers.
  const c=document.createElement("canvas");c.width=canvas.width;c.height=canvas.height;const x=c.getContext("2d"),stream=c.captureStream(exportSettings.fps),types=["video/mp4;codecs=avc1","video/mp4","video/webm"];
  const mime=types.find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t));if(!mime)throw new Error("MP4 is not supported in this browser. Use WebM.");
- const chunks=[],r=new MediaRecorder(stream,{mimeType:mime});r.ondataavailable=e=>e.data.size&&chunks.push(e.data);const p=new Promise(res=>r.onstop=()=>res(new Blob(chunks,{type:mime})));r.start(100);const start=performance.now(),total=Math.max(...state.layers.map((layer)=>layer.settings.cycle))*1000;function t(now){if(now-start>=total){r.stop();return}renderAnimationFrame(now-start,x);requestAnimationFrame(t)}requestAnimationFrame(t);return p;
+ const chunks=[],r=new MediaRecorder(stream,{mimeType:mime});r.ondataavailable=e=>e.data.size&&chunks.push(e.data);const p=new Promise(res=>r.onstop=()=>res(new Blob(chunks,{type:mime})));r.start(100);const start=performance.now(),total=animationDuration();function t(now){if(now-start>=total){r.stop();return}renderAnimationFrame(now-start,x);requestAnimationFrame(t)}requestAnimationFrame(t);return p;
 }
