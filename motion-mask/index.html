@@ -52,6 +52,11 @@
     <div class="quick" id="paintIntensity"><button data-v=".45">Soft</button><button data-v=".72" class="active">Medium</button><button data-v="1">Strong</button></div>
     <div style="height:12px"></div>
     <div class="historyStack"><button id="undoButton">Undo</button><button id="redoButton">Redo</button><button id="clearButton">Clear</button><button id="fillButton">Fill</button><button id="invertButton">Invert</button></div>
+    <div class="areaTransfer">
+      <div>Areas and effects</div>
+      <div class="historyStack"><button id="exportAreasButton" type="button">Export JSON</button><button id="importAreasButton" type="button">Import JSON</button></div>
+      <small>Exports painted areas and their motion settings only. The image is never included.</small>
+    </div>
    </div>
    <div id="paintNavigation" class="stepnav"><span>1 of 3</span><button class="primary" id="toAnimation">Continue to animation →</button></div>
  </div>
@@ -105,6 +110,7 @@
 </main>
 </div>
 <input id="fileInput" type="file" accept="image/*">
+<input id="areasFileInput" type="file" accept="application/json,.json" hidden>
 </div>
 <script type="module" src="js/main.js"></script>
 </body>

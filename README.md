@@ -20,3 +20,7 @@ PORT=3000 HOST=127.0.0.1 npm start
 ```
 
 Do not open `motion-mask/index.html` directly from the filesystem. Motion Mask uses JavaScript modules, which browsers reliably load through a local HTTP server.
+
+## Motion Mask areas and effects
+
+In Motion Mask's **Paint** panel, use **Export JSON** to save the painted areas and each layer's motion settings. The source image is not included in this file. To restore them, open an image with the same dimensions, then choose **Import JSON**. This lets you apply the saved areas and effects to another image without exporting image content.
