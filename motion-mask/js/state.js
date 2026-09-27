@@ -11,6 +11,8 @@ export const defaultLayerSettings = {
 
 function createMask() {
   const mask = document.createElement("canvas");
+  mask.width = canvas.width;
+  mask.height = canvas.height;
   return { mask, context: mask.getContext("2d"), settings: { ...defaultLayerSettings }, history: [], redo: [] };
 }
 
@@ -51,5 +53,5 @@ export const animationPresets = {
   quake: { name: "Quake", desc: "fast vibration", wave: 0.72, mode: "quake" },
 };
 
-export const warpCache = { w: 0 };
-export function invalidateWarpCache() { warpCache.w = 0; }
+export const warpCache = { invalidatedVersion: 0 };
+export function invalidateWarpCache() { warpCache.invalidatedVersion++; }

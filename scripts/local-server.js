@@ -22,7 +22,8 @@ function getFilePath(requestUrl) {
   const pathname = new URL(requestUrl, `http://${host}`).pathname;
   const relativePath = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
   const filePath = normalize(resolve(rootDirectory, relativePath));
-  return filePath === rootDirectory || filePath.startsWith(rootDirectory + sep) ? filePath : null;
+  if (filePath !== rootDirectory && !filePath.startsWith(rootDirectory + sep)) return null;
+  return existsSync(filePath) && statSync(filePath).isDirectory() ? resolve(filePath, "index.html") : filePath;
 }
 
 const server = createServer((request, response) => {
