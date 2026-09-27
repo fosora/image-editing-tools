@@ -21,6 +21,7 @@ export const state = {
   paintIntensity: 0.72,
   paintTool: "brush",
   brushSize: 52,
+  zoom: 1,
   layers: [createMask()],
   activeLayerIndex: 0,
   isDrawing: false,

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Local image editor with masking, motion, and export.">
-<title>Motion Mask — Local Editor</title>
+<title>Motion Mask</title>
 <link rel="stylesheet" href="style.css">
 
 </head>
@@ -27,6 +27,7 @@
   <div class="toolbar"><span class="title" id="modeTitle">Start</span><div class="spacer"></div><button class="ghost" id="pasteButton">Paste image</button></div>
   <div class="canvasbox" id="canvasContainer">
     <canvas id="canvas"></canvas>
+    <div id="brushCursor" aria-hidden="true"></div>
     <div class="emptyState" id="emptyState">
       <div class="dropZone" id="dropZone">
         <h1>Animate an image</h1>
@@ -46,6 +47,7 @@
     <div class="layerControls"><div class="layerHeading"><span>Layers</span><button id="addLayerButton" type="button">+ Add layer</button></div><div id="layerList" class="layerList"></div><button id="deleteLayerButton" class="deleteLayer" type="button">Delete selected layer</button></div>
     <div class="seg"><button id="brushButton" class="active">✎ Add</button><button id="eraseButton">⌫ Erase</button></div>
     <label class="row"><span>Brush size <output id="brushOutput">52</output></span><input id="brushSize" type="range" min="8" max="150" value="52"></label>
+    <div class="zoomControls" aria-label="Canvas zoom"><button id="zoomOutButton" type="button" title="Zoom out">−</button><output id="zoomOutput">100%</output><button id="zoomInButton" type="button" title="Zoom in">+</button><button id="zoomFitButton" type="button">Fit</button></div>
     <div style="font-size:12px;color:#aeb5bf;margin-bottom:7px">Paint intensity</div>
     <div class="quick" id="paintIntensity"><button data-v=".45">Soft</button><button data-v=".72" class="active">Medium</button><button data-v="1">Strong</button></div>
     <div style="height:12px"></div>

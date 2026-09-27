@@ -32,6 +32,30 @@ function restorePaintState(imageData) {
   layer.context.putImageData(imageData, 0, 0);
   invalidateWarpCache(); drawPaintMask(); updateHistoryButtons();
 }
+export function hideBrushCursor() {
+  $("#brushCursor").style.display = "none";
+}
+
+export function updateBrushCursorSize() {
+  if (!state.image || !canvas.width) return;
+  const cursor = $("#brushCursor");
+  const size = state.brushSize * canvas.getBoundingClientRect().width / canvas.width;
+  cursor.style.width = `${size}px`;
+  cursor.style.height = `${size}px`;
+}
+
+function updateBrushCursor(event) {
+  if (!state.image || state.currentStep !== 1) return hideBrushCursor();
+  const bounds = canvas.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return hideBrushCursor();
+  const containerBounds = $("#canvasContainer").getBoundingClientRect();
+  updateBrushCursorSize();
+  const cursor = $("#brushCursor");
+  cursor.style.left = `${event.clientX - containerBounds.left}px`;
+  cursor.style.top = `${event.clientY - containerBounds.top}px`;
+  cursor.style.display = "block";
+}
+
 function pointerPosition(event) {
   const bounds = canvas.getBoundingClientRect();
   return { x: (event.clientX - bounds.left) * canvas.width / bounds.width, y: (event.clientY - bounds.top) * canvas.height / bounds.height };
@@ -47,13 +71,14 @@ function paintAt(x, y) {
 
 export function initializePaintControls() {
   canvas.addEventListener("pointerdown", (event) => {
-    if (!state.image) return;
+    if (!state.image || state.currentStep !== 1) return;
     state.isDrawing = true; canvas.setPointerCapture(event.pointerId); savePaintState();
     const point = pointerPosition(event); paintAt(point.x, point.y);
   });
-  canvas.addEventListener("pointermove", (event) => { if (state.isDrawing) { const point = pointerPosition(event); paintAt(point.x, point.y); } });
+  canvas.addEventListener("pointermove", (event) => { updateBrushCursor(event); if (state.isDrawing) { const point = pointerPosition(event); paintAt(point.x, point.y); } });
   ["pointerup", "pointercancel"].forEach((type) => canvas.addEventListener(type, () => { state.isDrawing = false; }));
-  $("#brushSize").oninput = (event) => { state.brushSize = +event.target.value; $("#brushOutput").textContent = state.brushSize; };
+  canvas.addEventListener("pointerleave", hideBrushCursor);
+  $("#brushSize").oninput = (event) => { state.brushSize = +event.target.value; $("#brushOutput").textContent = state.brushSize; updateBrushCursorSize(); };
   $("#brushButton").onclick = () => setPaintTool("brush"); $("#eraseButton").onclick = () => setPaintTool("erase");
   $("#paintIntensity").onclick = (event) => { if (event.target.dataset.v) { state.paintIntensity = +event.target.dataset.v; $$("#paintIntensity button").forEach((button) => button.classList.toggle("active", button === event.target)); } };
   $("#undoButton").onclick = () => { const layer = activeLayer(); if (layer.history.length) { layer.redo.push(layer.context.getImageData(0, 0, layer.mask.width, layer.mask.height)); restorePaintState(layer.history.pop()); } };
