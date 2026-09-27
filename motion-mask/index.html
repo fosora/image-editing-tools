@@ -43,6 +43,7 @@
  <div class="panelhead"><h2 id="panelTitle">01 · Paint motion</h2><p id="panelDescription">The image stays still. Paint only the parts that will move.</p></div>
  <div class="body">
    <div id="paintControls">
+    <div class="layerControls"><div class="layerHeading"><span>Layers</span><button id="addLayerButton" type="button">+ Add layer</button></div><div id="layerList" class="layerList"></div><button id="deleteLayerButton" class="deleteLayer" type="button">Delete selected layer</button></div>
     <div class="seg"><button id="brushButton" class="active">✎ Add</button><button id="eraseButton">⌫ Erase</button></div>
     <label class="row"><span>Brush size <output id="brushOutput">52</output></span><input id="brushSize" type="range" min="8" max="150" value="52"></label>
     <div style="font-size:12px;color:#aeb5bf;margin-bottom:7px">Paint intensity</div>
@@ -101,7 +102,7 @@
 </aside>
 </main>
 </div>
-<input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp">
+<input id="fileInput" type="file" accept="image/*">
 </div>
 <script type="module" src="js/main.js"></script>
 </body>

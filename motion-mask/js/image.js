@@ -1,5 +1,15 @@
-import { $, canvas, ctx, mask, mctx, state, invalidateWarpCache } from "./state.js";
+import { $, canvas, ctx, state, resetLayers, invalidateWarpCache } from "./state.js";
 import { drawPaintMask, resetPaintHistory } from "./paint.js";
+
+let imageLoadVersion = 0;
+
+function isImageFile(file) {
+  return file && (file.type.startsWith("image/") || /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name));
+}
+function showImageError(message) {
+  const hint = $("#hint");
+  hint.textContent = message;
+}
 
 export function fitCanvasToContainer() {
   if (!state.image) return;
@@ -7,20 +17,32 @@ export function fitCanvasToContainer() {
   const ratio = Math.min(Math.max(1, box.clientWidth - 20) / state.image.width, Math.max(1, box.clientHeight - 20) / state.image.height, 1);
   const width = Math.max(1, Math.round(state.image.width * ratio));
   const height = Math.max(1, Math.round(state.image.height * ratio));
-  const oldMask = document.createElement("canvas"); oldMask.width = mask.width; oldMask.height = mask.height;
-  if (mask.width && mask.height) oldMask.getContext("2d").drawImage(mask, 0, 0);
-  canvas.width = width; canvas.height = height; mask.width = width; mask.height = height;
-  if (oldMask.width && oldMask.height) mctx.drawImage(oldMask, 0, 0, oldMask.width, oldMask.height, 0, 0, width, height);
+  const oldMasks = state.layers.map((layer) => {
+    const oldMask = document.createElement("canvas"); oldMask.width = layer.mask.width; oldMask.height = layer.mask.height;
+    if (oldMask.width && oldMask.height) oldMask.getContext("2d").drawImage(layer.mask, 0, 0);
+    return oldMask;
+  });
+  canvas.width = width; canvas.height = height;
+  state.layers.forEach((layer, index) => {
+    layer.mask.width = width; layer.mask.height = height;
+    if (oldMasks[index].width && oldMasks[index].height) layer.context.drawImage(oldMasks[index], 0, 0, oldMasks[index].width, oldMasks[index].height, 0, 0, width, height);
+  });
   invalidateWarpCache(); ctx.drawImage(state.image, 0, 0, width, height); drawPaintMask();
 }
 
 export function loadImageFile(file) {
-  if (!file || !file.type.match(/^image\/(png|jpeg|webp)$/)) return;
+  if (!isImageFile(file)) { showImageError("Choose a valid image file to continue."); return; }
+  const version = ++imageLoadVersion;
   const url = URL.createObjectURL(file), image = new Image();
   image.onload = () => {
-    state.image = image; invalidateWarpCache(); resetPaintHistory(); mask.width = 0; mask.height = 0;
+    if (version !== imageLoadVersion) { URL.revokeObjectURL(url); return; }
+    state.image = image; resetLayers(); invalidateWarpCache(); resetPaintHistory();
     $("#emptyState").classList.add("hidden"); fitCanvasToContainer();
     URL.revokeObjectURL(url); document.dispatchEvent(new CustomEvent("image-loaded"));
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    if (version === imageLoadVersion) showImageError("This image could not be loaded. Please try another file.");
   };
   image.src = url;
 }
@@ -33,7 +55,7 @@ function createSampleImage() {
   sample.toBlob((blob) => loadImageFile(new File([blob], "sample.png", { type: "image/png" })));
 }
 export function initializeImageControls() {
-  $("#uploadButton").onclick = () => $("#fileInput").click();
+  $("#uploadButton").onclick = () => { const input = $("#fileInput"); input.value = ""; input.click(); };
   $("#fileInput").onchange = (event) => loadImageFile(event.target.files[0]);
   [$("#dropZone"), $("#canvasContainer")].forEach((element) => { element.addEventListener("dragover", (event) => event.preventDefault()); element.addEventListener("drop", (event) => { event.preventDefault(); loadImageFile(event.dataTransfer.files[0]); }); });
   $("#pasteButton").onclick = async () => { try { const items = await navigator.clipboard.read(); for (const item of items) { const type = item.types.find((value) => value.startsWith("image/")); if (type) { loadImageFile(new File([await item.getType(type)], `pasted.${type.split("/")[1]}`, { type })); return; } } } catch { alert("The browser did not allow clipboard access. Use Ctrl+V."); } };
