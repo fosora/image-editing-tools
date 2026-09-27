@@ -2,6 +2,7 @@ import { $, $$, state, activeLayer, addLayer, removeActiveLayer, exportSettings,
 import { drawPaintMask, refreshPaintControls, hideBrushCursor } from "./paint.js";
 import { renderAnimationFrame } from "./animation.js";
 import { exportWebM, exportGIF, exportVideoMP4 } from "./export.js";
+import { exportAreas, importAreas } from "./areas-json.js";
 
 export function setStep(step) {
   if (!state.image && step > 1) step = 1;
@@ -39,6 +40,23 @@ export function initializeUi() {
   $("#playButton").onclick = () => { state.isPlaying = !state.isPlaying; $("#playButton").textContent = state.isPlaying ? "⏸ Pause" : "▶ Play"; if (!state.isPlaying && state.currentStep === 2) drawPaintMask(); };
   window.addEventListener("keydown", (event) => { if (event.code === "Space" && state.image && state.currentStep === 2) { event.preventDefault(); $("#playButton").click(); } });
   $("#resetButton").onclick = () => { if (confirm("Start a new image?")) location.reload(); };
+  $("#exportAreasButton").onclick = exportAreas;
+  $("#importAreasButton").onclick = () => {
+    if (!state.image) return alert("Open the target image before importing areas.");
+    $("#areasFileInput").click();
+  };
+  $("#areasFileInput").onchange = async (event) => {
+    const [file] = event.target.files;
+    event.target.value = "";
+    if (!file) return;
+    try {
+      await importAreas(file);
+      renderLayers();
+      syncLayerSettings();
+    } catch (error) {
+      alert(error.message || "Could not import areas.");
+    }
+  };
   $("#exportButton").onclick = async () => { if (!state.image) return; const status = $("#exportStatus"); status.textContent = "Rendering…"; try { const blob = await exportAnimation(), link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "motion-mask." + exportSettings.format; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 2000); status.textContent = "Exported locally successfully."; } catch (error) { status.textContent = error.message || "Could not export."; } };
   document.addEventListener("image-loaded", () => { renderLayers(); syncLayerSettings(); setStep(1); }); renderLayers(); syncLayerSettings(); setStep(1);
 }
