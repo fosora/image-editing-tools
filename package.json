@@ -1,0 +1,10 @@
+{
+  "name": "image-editing-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local browser-based image editing tools.",
+  "scripts": {
+    "start": "node scripts/local-server.js"
+  }
+}
