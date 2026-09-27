@@ -1,4 +1,4 @@
-import { $, canvas, ctx, mask, mctx, state, invalidateWarpCache } from "./state.js";
+import { $, canvas, ctx, state, resetLayers, invalidateWarpCache } from "./state.js";
 import { drawPaintMask, resetPaintHistory } from "./paint.js";
 
 export function fitCanvasToContainer() {
@@ -7,10 +7,16 @@ export function fitCanvasToContainer() {
   const ratio = Math.min(Math.max(1, box.clientWidth - 20) / state.image.width, Math.max(1, box.clientHeight - 20) / state.image.height, 1);
   const width = Math.max(1, Math.round(state.image.width * ratio));
   const height = Math.max(1, Math.round(state.image.height * ratio));
-  const oldMask = document.createElement("canvas"); oldMask.width = mask.width; oldMask.height = mask.height;
-  if (mask.width && mask.height) oldMask.getContext("2d").drawImage(mask, 0, 0);
-  canvas.width = width; canvas.height = height; mask.width = width; mask.height = height;
-  if (oldMask.width && oldMask.height) mctx.drawImage(oldMask, 0, 0, oldMask.width, oldMask.height, 0, 0, width, height);
+  const oldMasks = state.layers.map((layer) => {
+    const oldMask = document.createElement("canvas"); oldMask.width = layer.mask.width; oldMask.height = layer.mask.height;
+    if (oldMask.width && oldMask.height) oldMask.getContext("2d").drawImage(layer.mask, 0, 0);
+    return oldMask;
+  });
+  canvas.width = width; canvas.height = height;
+  state.layers.forEach((layer, index) => {
+    layer.mask.width = width; layer.mask.height = height;
+    if (oldMasks[index].width && oldMasks[index].height) layer.context.drawImage(oldMasks[index], 0, 0, oldMasks[index].width, oldMasks[index].height, 0, 0, width, height);
+  });
   invalidateWarpCache(); ctx.drawImage(state.image, 0, 0, width, height); drawPaintMask();
 }
 
@@ -18,7 +24,7 @@ export function loadImageFile(file) {
   if (!file || !file.type.match(/^image\/(png|jpeg|webp)$/)) return;
   const url = URL.createObjectURL(file), image = new Image();
   image.onload = () => {
-    state.image = image; invalidateWarpCache(); resetPaintHistory(); mask.width = 0; mask.height = 0;
+    state.image = image; resetLayers(); invalidateWarpCache(); resetPaintHistory();
     $("#emptyState").classList.add("hidden"); fitCanvasToContainer();
     URL.revokeObjectURL(url); document.dispatchEvent(new CustomEvent("image-loaded"));
   };

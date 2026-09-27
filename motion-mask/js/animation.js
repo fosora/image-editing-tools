@@ -1,143 +1,57 @@
-import { canvas, ctx, mask, mctx, state, animationSettings, animationPresets, warpCache } from "./state.js";
+import { canvas, ctx, state, animationPresets } from "./state.js";
 
-const warpSource=document.createElement("canvas");
-const warpContext=warpSource.getContext("2d",{willReadFrequently:true});
-const warpMask=document.createElement("canvas");
-const warpMaskContext=warpMask.getContext("2d",{willReadFrequently:true});
-Object.assign(warpCache,{w:0,h:0,image:null,mask:null});
-
-function ensureWarpCache(){
- if(!state.image||warpCache.w===canvas.width&&warpCache.h===canvas.height&&warpCache.cohesion===animationSettings.cohesion)return;
- const w=canvas.width,h=canvas.height;
- warpSource.width=w; warpSource.height=h;
- warpMask.width=w; warpMask.height=h;
- warpContext.clearRect(0,0,w,h);
- warpContext.drawImage(state.image,0,0,w,h);
- warpMaskContext.clearRect(0,0,w,h);
- const blur=Math.max(4,Math.round(6+(100-animationSettings.cohesion)*0.20));
- warpMaskContext.save();
- warpMaskContext.filter=`blur(${blur}px)`;
- warpMaskContext.drawImage(mask,0,0,w,h);
- warpMaskContext.restore();
- const rawMask=mctx.getImageData(0,0,w,h).data;
- let sumA=0,sumX=0,sumY=0,minY=h,maxY=0;
- for(let i=0;i<rawMask.length;i+=4){
-   const a=rawMask[i+3];
-   if(a){const p=i/4, py=Math.floor(p/w);sumA+=a;sumX+=(p%w)*a;sumY+=py*a;if(py<minY)minY=py;if(py>maxY)maxY=py;}
- }
- const cx=sumA?sumX/sumA:w/2,cy=sumA?sumY/sumA:h/2;
- Object.assign(warpCache,{w,h,cohesion:animationSettings.cohesion,image:warpContext.getImageData(0,0,w,h),mask:warpMaskContext.getImageData(0,0,w,h),cx,cy,minY:maxY>=minY?minY:0,maxY});
+function smoothStep(value) { value = Math.max(0, Math.min(1, value)); return value * value * (3 - 2 * value); }
+function maskMetrics(layer, width, height) {
+  const data = layer.context.getImageData(0, 0, width, height).data;
+  let sum = 0, sumX = 0, sumY = 0, minY = height, maxY = 0;
+  for (let i = 0; i < data.length; i += 4) { const alpha = data[i + 3]; if (alpha) { const pixel = i / 4; const y = Math.floor(pixel / width); sum += alpha; sumX += (pixel % width) * alpha; sumY += y * alpha; minY = Math.min(minY, y); maxY = Math.max(maxY, y); } }
+  return { data, cx: sum ? sumX / sum : width / 2, cy: sum ? sumY / sum : height / 2, minY, maxY };
+}
+function getMotionVector(time, width, height, settings) {
+  const preset = animationPresets[settings.preset], phase = time / Math.max(.1, settings.cycle) * Math.PI * 2;
+  const sine = Math.sin(phase), cosine = Math.cos(phase); let x = 0, y = 0;
+  if (settings.direction !== "preset") {
+    if (settings.direction === "left") x = -Math.abs(sine); else if (settings.direction === "right") x = Math.abs(sine);
+    else if (settings.direction === "up") y = -Math.abs(sine); else if (settings.direction === "down") y = Math.abs(sine);
+    else if (settings.direction === "horizontal") x = sine; else if (settings.direction === "vertical") y = sine;
+    else if (settings.direction === "circular") { x = cosine; y = sine; }
+  } else {
+    if (preset.mode === "sway") x = sine; else if (preset.mode === "bounce") y = Math.abs(sine) * 2 - 1;
+    else if (preset.mode === "wave") { x = sine; y = Math.sin(phase * 2) * .28; } else if (preset.mode === "pulse") { x = sine * .72; y = cosine * .72; }
+    else if (preset.mode === "quake") { x = Math.sin(phase * 5) * .75; y = Math.cos(phase * 7) * .75; } else { x = sine; y = cosine * .48; }
+  }
+  const amplitude = Math.min(width, height) * .08 * (settings.force / 100) * preset.wave * (.45 + settings.elasticity / 100 * 1.35) * (.35 + settings.stability / 100 * .65);
+  const gravity = settings.gravity / 100 * amplitude * .75, angle = settings.gravityAngle * Math.PI / 180;
+  return { x: x * amplitude + Math.cos(angle) * gravity * (1 - cosine / 2), y: y * amplitude + Math.sin(angle) * gravity * (1 - cosine / 2), phase, amplitude };
+}
+function sample(source, width, height, x, y, target, offset) {
+  x = Math.max(0, Math.min(width - 1, x)); y = Math.max(0, Math.min(height - 1, y));
+  const x0 = x | 0, y0 = y | 0, x1 = Math.min(width - 1, x0 + 1), y1 = Math.min(height - 1, y0 + 1), fx = x - x0, fy = y - y0;
+  const a = (1 - fx) * (1 - fy), b = fx * (1 - fy), c = (1 - fx) * fy, d = fx * fy;
+  const p00 = (y0 * width + x0) * 4, p10 = (y0 * width + x1) * 4, p01 = (y1 * width + x0) * 4, p11 = (y1 * width + x1) * 4;
+  for (let channel = 0; channel < 4; channel++) target[offset + channel] = source[p00 + channel] * a + source[p10 + channel] * b + source[p01 + channel] * c + source[p11 + channel] * d;
 }
 
-function smoothStep(v){
- v=Math.max(0,Math.min(1,v));
- return v*v*(3-2*v);
+export function renderAnimationFrame(time, target = ctx) {
+  if (!state.image) return;
+  const width = canvas.width, height = canvas.height, base = document.createElement("canvas"); base.width = width; base.height = height;
+  const baseContext = base.getContext("2d"); baseContext.drawImage(state.image, 0, 0, width, height);
+  let source = baseContext.getImageData(0, 0, width, height).data;
+  state.layers.forEach((layer) => {
+    const settings = layer.settings, metrics = maskMetrics(layer, width, height), motion = getMotionVector((time % (settings.cycle * 1000)) / 1000, width, height, settings);
+    const output = new Uint8ClampedArray(source), cohesion = settings.cohesion / 100, elasticity = settings.elasticity / 100, stability = settings.stability / 100;
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4; let strength = smoothStep(metrics.data[offset + 3] / 255); strength *= smoothStep(Math.min(1, metrics.data[offset + 3] / 255 * 1.35)) * (.55 + cohesion * .45);
+      if (!strength) continue;
+      if (animationPresets[settings.preset].mode === "bounce" && metrics.maxY > metrics.minY) strength *= smoothStep((y - metrics.minY) / Math.max(8, Math.min(22, (metrics.maxY - metrics.minY) * .1)));
+      const wave = 1 + elasticity * .18 * Math.sin(motion.phase * 2 + strength * 2.2); let sx, sy;
+      if (animationPresets[settings.preset].mode === "pulse" && settings.direction === "preset") { const scale = 1 + Math.sin(motion.phase) * motion.amplitude / Math.min(width, height) * 1.6 * strength * wave; sx = metrics.cx + (x - metrics.cx) / scale; sy = metrics.cy + (y - metrics.cy) / scale; }
+      else { sx = x - motion.x * strength * wave * (.72 + stability * .28); sy = y - motion.y * strength * wave * (.72 + stability * .28); }
+      sample(source, width, height, sx, sy, output, offset);
+    }
+    source = output;
+  });
+  const frame = new ImageData(source, width, height); target.putImageData(frame, 0, 0);
 }
-
-function getMotionVector(t,w,h){
- const preset=animationPresets[animationSettings.preset];
- const cycle=Math.max(.1,animationSettings.cycle);
- const phase=t/cycle*Math.PI*2;
- const s=Math.sin(phase), c=Math.cos(phase);
- let vx=0,vy=0;
- if(animationSettings.direction!=="preset"){
-   const dir = animationSettings.direction;
-   if(dir==="left") vx=-Math.abs(s);
-   else if(dir==="right") vx=Math.abs(s);
-   else if(dir==="up") vy=-Math.abs(s);
-   else if(dir==="down") vy=Math.abs(s);
-   else if(dir==="horizontal") vx=s;
-   else if(dir==="vertical") vy=s;
-   else if(dir==="circular") {
-     vx=Math.cos(phase);
-     vy=Math.sin(phase);
-   }
- }else{
-   switch(preset.mode){
-     case "sway": vx=s; break;
-     case "bounce": vy=Math.abs(s)*2-1; break;
-     case "wave": vx=s; vy=Math.sin(phase*2)*.28; break;
-     case "pulse": vx=s*.72; vy=c*.72; break;
-     case "quake": vx=Math.sin(phase*5)*.75; vy=Math.cos(phase*7)*.75; break;
-     default: vx=s; vy=c*.48;
-   }
- }
- const elastic=0.45+(animationSettings.elasticity/100)*1.35;
- const stable=0.35+(animationSettings.stability/100)*0.65;
- // 50% global reduction: new 100 equals the previous 50.
- const amplitude=Math.min(w,h)*0.16*(animationSettings.force/100)*0.5*preset.wave*elastic*stable;
- vx*=amplitude; vy*=amplitude;
- const pulseScale=preset.mode==="pulse"
-   ? s*(amplitude/Math.max(1,Math.min(w,h)))*1.6
-   : 0;
- const angle=animationSettings.gravityAngle*Math.PI/180;
- const gravity=(animationSettings.gravity/100)*amplitude*.75;
- vx+=Math.cos(angle)*gravity*(.5+.5*(1-c));
- vy+=Math.sin(angle)*gravity*(.5+.5*(1-c));
- return {x:vx,y:vy,phase,amplitude,pulseScale};
-}
-
-export function renderAnimationFrame(time, target=ctx){
- if(!state.image)return;
- const t=(time%(animationSettings.cycle*1000))/1000;
- ensureWarpCache();
- const w=canvas.width,h=canvas.height;
- const src=warpCache.image.data, md=warpCache.mask.data;
- const out=target.createImageData(w,h), dst=out.data;
- const motion=getMotionVector(t,w,h);
- const cohesion=animationSettings.cohesion/100;
- const stability=animationSettings.stability/100;
- const elasticity=animationSettings.elasticity/100;
- for(let y=0;y<h;y++){
-   for(let x=0;x<w;x++){
-     const i=(y*w+x)*4;
-     let strength=smoothStep(md[i+3]/255);
-     // Feather the deformation into the untouched image so the boundary never moves abruptly.
-     const edgeFeather=smoothStep(Math.min(1,md[i+3]/255*1.35));
-     strength*=edgeFeather;
-     strength*=0.55+cohesion*.45;
-     // The bounce effect gets a short, soft fade at its top edge.
-     // This keeps the upper boundary visually attached to the image while
-     // still allowing the lower part of the painted area to jump freely.
-     if(animationPresets[animationSettings.preset].mode==="bounce" && warpCache.maxY>warpCache.minY){
-       const fadePx=Math.max(8,Math.min(22,(warpCache.maxY-warpCache.minY)*0.10));
-       const topFade=smoothStep((y-warpCache.minY)/fadePx);
-       strength*=topFade;
-     }
-     const elasticWave=1+elasticity*.18*Math.sin(motion.phase*2+strength*2.2);
-     let sx,sy;
-
-     // Pulsation uses radial scaling around the painted area's center.
-     // Positive scale inflates; negative scale contracts.
-     if(animationPresets[animationSettings.preset].mode==="pulse" && animationSettings.direction==="preset"){
-       const pulse=1+motion.pulseScale*strength*elasticWave;
-       sx=warpCache.cx+(x-warpCache.cx)/pulse;
-       sy=warpCache.cy+(y-warpCache.cy)/pulse;
-     }else{
-       let dx=motion.x*strength*elasticWave;
-       let dy=motion.y*strength*elasticWave;
-       dx*=0.72+stability*.28;
-       dy*=0.72+stability*.28;
-       sx=x-dx;
-       sy=y-dy;
-     }
-     sx=Math.max(0,Math.min(w-1,sx));
-     sy=Math.max(0,Math.min(h-1,sy));
-     const x0=sx|0,y0=sy|0,x1=Math.min(w-1,x0+1),y1=Math.min(h-1,y0+1);
-     const fx=sx-x0,fy=sy-y0;
-     const a=(1-fx)*(1-fy),b=fx*(1-fy),c=(1-fx)*fy,d=fx*fy;
-     const p00=(y0*w+x0)*4,p10=(y0*w+x1)*4,p01=(y1*w+x0)*4,p11=(y1*w+x1)*4;
-     dst[i]=src[p00]*a+src[p10]*b+src[p01]*c+src[p11]*d;
-     dst[i+1]=src[p00+1]*a+src[p10+1]*b+src[p01+1]*c+src[p11+1]*d;
-     dst[i+2]=src[p00+2]*a+src[p10+2]*b+src[p01+2]*c+src[p11+2]*d;
-     dst[i+3]=src[p00+3]*a+src[p10+3]*b+src[p01+3]*c+src[p11+3]*d;
-   }
- }
- target.putImageData(out,0,0);
-}
-
-function animationLoop(ts){
- if(state.isPlaying && state.currentStep===2 && state.image) renderAnimationFrame(ts);
- requestAnimationFrame(animationLoop);
-}
+function animationLoop(timestamp) { if (state.isPlaying && state.currentStep === 2 && state.image) renderAnimationFrame(timestamp); requestAnimationFrame(animationLoop); }
 export function startAnimationLoop() { requestAnimationFrame(animationLoop); }
