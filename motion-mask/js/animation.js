@@ -11,7 +11,7 @@ function smoothStep(value) {
 }
 
 function getEffectiveCohesion(value) {
-  return Math.max(0, Math.min(100, value - 10));
+  return Math.max(0, Math.min(110, value + 10));
 }
 
 function ensureWarpCache() {
