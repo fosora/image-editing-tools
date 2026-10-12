@@ -10,6 +10,10 @@ function smoothStep(value) {
   return value * value * (3 - 2 * value);
 }
 
+function getEffectiveCohesion(value) {
+  return Math.max(0, Math.min(100, value - 10));
+}
+
 function ensureWarpCache() {
   if (!state.image || warpCache.version === warpCache.invalidatedVersion && warpCache.width === canvas.width && warpCache.height === canvas.height) return;
 
@@ -22,7 +26,8 @@ function ensureWarpCache() {
   const layers = state.layers.map((layer) => {
     maskCanvas.width = width; maskCanvas.height = height;
     maskContext.clearRect(0, 0, width, height);
-    const blur = Math.max(4, Math.round(6 + (100 - layer.settings.cohesion) * 0.20));
+    const effectiveCohesion = getEffectiveCohesion(layer.settings.cohesion);
+    const blur = Math.max(4, Math.round(6 + (100 - effectiveCohesion) * 0.20));
     maskContext.save();
     maskContext.filter = `blur(${blur}px)`;
     maskContext.drawImage(layer.mask, 0, 0, width, height);
@@ -98,7 +103,8 @@ function deformLayer(time, layer, cache, source, width, height) {
   const settings = layer.settings, preset = animationPresets[settings.preset];
   const motion = getMotionVector(time % (settings.cycle * 1000) / 1000, width, height, settings);
   const output = new Uint8ClampedArray(source), mask = cache.mask.data;
-  const cohesion = settings.cohesion / 100, stability = settings.stability / 100, elasticity = settings.elasticity / 100;
+  const cohesion = getEffectiveCohesion(settings.cohesion) / 100;
+  const stability = settings.stability / 100, elasticity = settings.elasticity / 100;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const index = (y * width + x) * 4;
     let strength = smoothStep(mask[index + 3] / 255);
